@@ -32,15 +32,22 @@ wget <release 下载地址>/tunmap-server-linux-amd64
 ./tunmap-server --addr :8080 --domain example.com        # 可选 --key 你的密钥
 ```
 
-### 2. 用客户端（三选一）
+### 2. 用客户端（四选一）
 
-**安卓手机**（最简单）：
+**电脑桌面版**（双击即用，macOS / Windows 都有，推荐新手）：
+1. 到 [Release 下载页](#下载) 下载对应系统的 zip 解压
+2. Windows 双击 `tunmap-win-x64.exe`；macOS 双击 `启动.command`
+3. 浏览器自动打开控制页：第一次填一次服务器地址（如 `http://123.45.67.89:8080`）
+4. 输入要映射的端口（如 5050）→ 点 **启动** → 出现绿色公网地址，点一下复制
+5. 想停就点 **停止**；点 **退出程序** 彻底关闭
+
+**安卓手机**（同样三步）：
 1. 安装 [tunmap-android.apk](#下载)
 2. 第一次打开填一次服务器地址（如 `http://123.45.67.89:8080`），以后不用再填
 3. 输入要映射的端口（如 5050）→ 点 **启动** → 底下出现绿色公网地址，点一下复制
 4. 想停就点 **停止**
 
-**电脑**：
+**电脑命令行**：
 
 ```bash
 ./tunmap-client --server http://123.45.67.89:8080 --port 5050
@@ -64,11 +71,14 @@ TUNMAP_SERVER=http://123.45.67.89:8080 ./tunmap-client --port 5050
 
 | 文件 | 说明 |
 |---|---|
+| `tunmap-windows-x64.zip` | **Windows 桌面版**（双击即用） |
+| `tunmap-mac-apple-silicon.zip` | **macOS 桌面版**（Apple 芯片 M1/M2/M3） |
+| `tunmap-mac-intel.zip` | **macOS 桌面版**（Intel 芯片） |
 | `tunmap-android.apk` | 安卓客户端（Android 5.0+） |
 | `tunmap-server-linux-amd64` / `-arm64` | 服务端（Linux） |
-| `tunmap-client-linux-amd64` / `-arm64` | 客户端（Linux） |
-| `tunmap-client-darwin-amd64` / `-arm64` | 客户端（macOS） |
-| `tunmap-client-windows-amd64.exe` | 客户端（Windows） |
+| `tunmap-client-linux-amd64` / `-arm64` | 客户端（Linux 命令行） |
+| `tunmap-client-darwin-amd64` / `-arm64` | 客户端（macOS 命令行） |
+| `tunmap-client-windows-amd64.exe` | 客户端（Windows 命令行） |
 
 ## 服务端参数
 
@@ -94,7 +104,8 @@ internal/
 mobile/         # gomobile 绑定层（安卓/iOS 共用）
 android/        # 安卓 APP（极简单屏 UI）
 cmd/server      # 服务端入口
-cmd/client      # 客户端入口
+cmd/client      # 命令行客户端入口
+cmd/desktop     # 桌面版客户端（macOS/Windows，双击运行 + 浏览器控制页）
 ```
 
 ## 开发
@@ -117,6 +128,11 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o dist/tunmap-server-linux-amd64 ./cmd/
 # 客户端（交叉编译）
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o dist/tunmap-client-darwin-arm64 ./cmd/client
 CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o dist/tunmap-client-windows-amd64.exe ./cmd/client
+
+# 桌面版客户端（macOS Apple 芯片 / Intel / Windows，双击运行）
+CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags="-s -w" -o dist/tunmap-mac-apple-silicon ./cmd/desktop
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags="-s -w" -o dist/tunmap-mac-intel ./cmd/desktop
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/tunmap-win-x64.exe ./cmd/desktop
 
 # 安卓 APK（需要 Android SDK + gomobile）
 cd mobile && gomobile bind -target=android -androidapi=21 -o ../android/tunmap.aar .

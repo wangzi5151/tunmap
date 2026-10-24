@@ -28,7 +28,7 @@ type Options struct {
 // It keeps reconnecting every 3s. When stop is closed (non-nil), it returns.
 func Run(opt Options, stop <-chan struct{}) {
 	for {
-		err := dial(opt)
+		err := dial(opt, stop)
 		if err != nil {
 			log.Printf("connection error: %v — retrying in 3s", err)
 		}
@@ -55,7 +55,10 @@ func stopped(stop <-chan struct{}) bool {
 	}
 }
 
-func dial(opt Options) error {
+// dial opens a WebSocket to the server, requests a tunnel and then serves
+// forwarded HTTP requests. It returns when the connection dies or stop is
+// closed (closing the socket interrupts the blocking read).
+func dial(opt Options, stop <-chan struct{}) error {
 	u, err := url.Parse(opt.Server)
 	if err != nil {
 		return err
@@ -71,7 +74,6 @@ func dial(opt Options) error {
 	if err != nil {
 		return err
 	}
-	defer ws.Close()
 
 	// request a tunnel
 	if err := ws.WriteJSON(&protocol.Message{
@@ -79,29 +81,44 @@ func dial(opt Options) error {
 		LocalPort: opt.LocalPort,
 		Subdomain: opt.Subdomain,
 	}); err != nil {
+		ws.Close()
 		return err
 	}
 
 	ws.SetReadLimit(1 << 22)
-	for {
-		var m protocol.Message
-		if err := ws.ReadJSON(&m); err != nil {
-			return err
+	done := make(chan error, 1)
+	go func() {
+		defer ws.Close()
+		for {
+			var m protocol.Message
+			if err := ws.ReadJSON(&m); err != nil {
+				done <- err
+				return
+			}
+			switch m.Type {
+			case protocol.TypeTunnelCreated:
+				log.Printf("==================================================")
+				log.Printf("  tunnel ready")
+				log.Printf("  public URL : %s", m.PublicURL)
+				log.Printf("  forwards   -> localhost:%d", opt.LocalPort)
+				log.Printf("==================================================")
+			case protocol.TypeTunnelError:
+				done <- fmt.Errorf("server rejected tunnel: %s", m.Message)
+				return
+			case protocol.TypeHTTPRequest:
+				forwardToLocal(ws, &m, opt.LocalPort)
+			case protocol.TypePing:
+				_ = ws.WriteJSON(&protocol.Message{Type: protocol.TypePong})
+			}
 		}
-		switch m.Type {
-		case protocol.TypeTunnelCreated:
-			log.Printf("==================================================")
-			log.Printf("  tunnel ready")
-			log.Printf("  public URL : %s", m.PublicURL)
-			log.Printf("  forwards   -> localhost:%d", opt.LocalPort)
-			log.Printf("==================================================")
-		case protocol.TypeTunnelError:
-			return fmt.Errorf("server rejected tunnel: %s", m.Message)
-		case protocol.TypeHTTPRequest:
-			forwardToLocal(ws, &m, opt.LocalPort)
-		case protocol.TypePing:
-			_ = ws.WriteJSON(&protocol.Message{Type: protocol.TypePong})
-		}
+	}()
+
+	select {
+	case <-stop:
+		ws.Close() // interrupts ReadJSON, read goroutine exits
+		return nil
+	case err := <-done:
+		return err
 	}
 }
 

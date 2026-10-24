@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tunmap 桌面版</title>
+<style>
+  :root { --bg:#0a0e17; --panel:#111826; --panel2:#0d1420; --border:#1f2a3d;
+          --text:#e8eef7; --muted:#8494ab; --accent:#8b5cf6; --accent2:#6d28d9;
+          --green:#34d399; --red:#f87171; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);
+       color:var(--text);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .box{width:100%;max-width:420px}
+  h1{text-align:center;font-size:28px;color:var(--accent);margin-bottom:6px}
+  .sub{text-align:center;color:var(--muted);font-size:13px;margin-bottom:34px}
+  label{display:block;font-size:12px;color:var(--muted);margin:14px 0 4px}
+  input{width:100%;padding:12px;background:var(--panel);border:1px solid var(--border);border-radius:8px;
+        color:var(--text);font-size:16px;text-align:center}
+  input:focus{outline:none;border-color:var(--accent)}
+  #btn{width:100%;margin-top:26px;padding:16px;border:0;border-radius:10px;font-size:17px;font-weight:600;
+       background:var(--accent);color:#fff;cursor:pointer}
+  #btn.stop{background:var(--red)}
+  #result{margin-top:26px;text-align:center;font-size:14px;line-height:1.7;min-height:60px;word-break:break-all}
+  .ok{color:var(--green)} .fail{color:var(--red)} .info{color:var(--muted)}
+  #log{margin-top:20px;background:#070b12;border:1px solid var(--border);border-radius:8px;padding:10px;
+       font-family:ui-monospace,monospace;font-size:11px;color:#8494ab;height:140px;overflow-y:auto;white-space:pre-wrap}
+  .small{margin-top:14px;text-align:center;font-size:11px;color:#5a6a84;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>tunmap</h1>
+  <div class="sub">填端口 → 启动 → 复制公网地址</div>
+
+  <label>服务器地址（第一次填，之后自动记住）</label>
+  <input id="server" type="text" placeholder="http://123.45.67.89:8080">
+
+  <label>本机要映射的端口</label>
+  <input id="port" type="number" placeholder="5050">
+
+  <button id="btn" onclick="toggle()">启动</button>
+
+  <div id="result" class="info">就绪，填好端口点启动</div>
+
+  <div id="log"></div>
+
+  <div class="small" onclick="quit()">退出程序（关闭后台）</div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let running = false;
+
+$('server').value = localStorage.getItem('tunmap_server') || '';
+$('port').value = localStorage.getItem('tunmap_port') || '';
+
+const es = new EventSource('/api/events');
+es.addEventListener('log', ev => {
+  const line = JSON.parse(ev.data);
+  const log = $('log');
+  log.textContent += line + '\n';
+  log.scrollTop = log.scrollHeight;
+  if (line.includes('public URL :')) {
+    const url = line.split('public URL :')[1].trim();
+    ok('成功！公网地址：\n' + url + '\n\n（点一下复制）');
+    $('result').onclick = () => { navigator.clipboard.writeText(url); show('已复制 ✓', 'ok'); };
+  } else if (/error|refused|no such host/i.test(line)) {
+    fail('连不上服务器：' + line);
+  }
+});
+
+async function toggle() {
+  if (running) { await api('/api/stop'); running = false; btnReset(); show('已停止', 'info'); return; }
+  const server = $('server').value.trim();
+  const port = $('port').value.trim();
+  if (!port || isNaN(+port) || +port < 1 || +port > 65535) return fail('端口不对，填 1-65535');
+  if (!server) return fail('还没填服务器地址');
+  localStorage.setItem('tunmap_server', server);
+  localStorage.setItem('tunmap_port', port);
+  const res = await fetch('/api/start?server=' + encodeURIComponent(server) + '&port=' + port);
+  if (!res.ok) return fail((await res.text()) || '启动失败');
+  running = true;
+  $('btn').textContent = '停止'; $('btn').classList.add('stop');
+  show('正在连接服务器…', 'info');
+}
+
+function btnReset() {
+  running = false; $('btn').textContent = '启动'; $('btn').classList.remove('stop');
+  $('result').onclick = null;
+}
+function show(t, cls) { const r = $('result'); r.className = cls; r.textContent = t; }
+function ok(t) { show(t, 'ok'); }
+function fail(t) { show(t, 'fail'); }
+async function api(p) { return fetch(p); }
+function quit() { fetch('/api/quit').then(() => setTimeout(() => location.href = 'about:blank', 200)); }
+</script>
+</body>
+</html>
