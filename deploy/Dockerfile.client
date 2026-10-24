@@ -1,0 +1,12 @@
+# Build the tunmap client as a static binary for any user to download.
+FROM golang:1.23-alpine AS build
+WORKDIR /src
+COPY go.mod ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/tunmap-client ./cmd/client
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+COPY --from=build /out/tunmap-client /usr/local/bin/tunmap-client
+ENTRYPOINT ["/usr/local/bin/tunmap-client"]

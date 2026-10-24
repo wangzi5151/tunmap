@@ -1,0 +1,27 @@
+# Go
+/tunmap
+/tunmap-server
+/tunmap-client
+/dist/
+*.db
+*.db-wal
+*.db-shm
+data/
+
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.aar
+*.apk
+tunmap-sources.jar
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Env
+.env

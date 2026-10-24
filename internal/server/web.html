@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tunmap · 内网映射器</title>
+<style>
+  :root {
+    --bg:#0a0e17; --panel:#111826; --panel2:#0d1420; --border:#1f2a3d;
+    --text:#e8eef7; --muted:#8494ab; --accent:#8b5cf6; --accent2:#6d28d9;
+    --green:#34d399; --red:#f87171; --yellow:#fbbf24; --blue:#60a5fa;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5}
+  a{color:var(--accent);text-decoration:none}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  button{font-family:inherit}
+
+  nav{background:var(--panel);border-bottom:1px solid var(--border);
+      padding:0 28px;height:56px;display:flex;align-items:center;
+      position:sticky;top:0;z-index:10}
+  nav .logo{display:flex;align-items:center;gap:10px;font-weight:600;font-size:16px}
+  nav .logo .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);
+                 box-shadow:0 0 12px var(--accent)}
+  nav .logo .beta{font-size:10px;color:var(--muted);border:1px solid var(--border);
+                  padding:1px 6px;border-radius:8px;font-weight:400}
+  nav .right{margin-left:auto;color:var(--muted);font-size:12px}
+
+  .wrap{max-width:1280px;margin:0 auto;padding:24px}
+
+  .hero{background:linear-gradient(135deg,#1a0f2e 0%,var(--panel) 100%);
+        border:1px solid var(--border);border-radius:12px;padding:22px 24px;margin-bottom:20px}
+  .hero h2{font-size:18px;margin-bottom:6px}
+  .hero p{color:var(--muted);font-size:13px;margin-bottom:14px}
+  .cmd{background:#070b12;border:1px solid var(--border);border-radius:8px;padding:12px 14px;
+       font-family:ui-monospace,monospace;font-size:12px;color:var(--green);overflow-x:auto;
+       white-space:pre;line-height:1.7}
+  .cmd .c{color:#4b5a72}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+  .stat .label{color:var(--muted);font-size:12px;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .stat .value{font-size:24px;font-weight:600;font-family:ui-monospace,monospace}
+  .stat .sub{font-size:11px;color:var(--muted);margin-top:4px}
+  .pulse{width:8px;height:8px;border-radius:50%;background:var(--green);
+         box-shadow:0 0 0 0 rgba(52,211,153,.6);animation:pulse 2s infinite;display:inline-block}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}70%{box-shadow:0 0 0 8px rgba(52,211,153,0)}100%{box-shadow:0 0 0 0 rgba(52,211,153,0)}}
+
+  .grid{display:grid;grid-template-columns:1fr 340px;gap:14px;margin-bottom:20px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .card header{padding:12px 16px;border-bottom:1px solid var(--border);
+              display:flex;align-items:center;justify-content:space-between;
+              font-size:13px;color:var(--muted);flex-wrap:wrap;gap:8px}
+  .card header h3{color:var(--text);font-size:13px;font-weight:600}
+  .live{font-size:11px;color:var(--green);display:flex;align-items:center;gap:5px}
+
+  .filterbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .fbtn{background:var(--panel2);border:1px solid var(--border);color:var(--muted);
+        padding:3px 10px;border-radius:12px;font-size:11px;cursor:pointer;font-family:ui-monospace,monospace}
+  .fbtn:hover{color:var(--text);border-color:var(--muted)}
+  .fbtn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .fsearch{background:var(--panel2);border:1px solid var(--border);color:var(--text);
+           padding:4px 10px;border-radius:6px;font-size:11px;width:140px;font-family:ui-monospace,monospace}
+  .fsearch:focus{outline:none;border-color:var(--accent)}
+
+  .terminal{background:#070b12;height:320px;overflow-y:auto;padding:10px 14px;
+            font-family:ui-monospace,monospace;font-size:12px;line-height:1.9}
+  .terminal .row{display:flex;gap:10px;white-space:nowrap;padding:1px 6px;border-radius:4px;cursor:pointer}
+  .terminal .row:hover{background:rgba(139,92,246,.08)}
+  .terminal .row.selected{background:rgba(139,92,246,.18)}
+  .terminal .time{color:#4b5a72}
+  .terminal .m-get{color:var(--blue)} .terminal .m-post{color:var(--green)}
+  .terminal .m-put,.terminal .m-patch{color:var(--yellow)} .terminal .m-delete{color:var(--red)}
+  .terminal .path{color:#c9d6e8;overflow:hidden;text-overflow:ellipsis}
+  .terminal .st-2{color:var(--green)} .terminal .st-3{color:var(--blue)}
+  .terminal .st-4{color:var(--yellow)} .terminal .st-5{color:var(--red)}
+  .terminal .dur{color:#4b5a72;margin-left:auto}
+  .terminal .empty{color:#4b5a72;text-align:center;margin-top:40px}
+
+  .inspector{background:var(--panel2);border-top:1px solid var(--border);padding:14px 16px;display:none}
+  .inspector.show{display:block}
+  .inspector .head{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-family:ui-monospace,monospace;font-size:12px}
+  .inspector .head .close{margin-left:auto;cursor:pointer;color:var(--muted);border:0;background:none;font-size:14px}
+  .inspector .tabs{display:flex;gap:12px;border-bottom:1px solid var(--border);margin-bottom:10px}
+  .inspector .tab{padding:4px 0;color:var(--muted);cursor:pointer;font-size:12px;border-bottom:2px solid transparent}
+  .inspector .tab.active{color:var(--text);border-color:var(--accent)}
+  .inspector pre{background:#070b12;padding:10px;border-radius:6px;font-size:11px;
+                 overflow-x:auto;max-height:180px;overflow-y:auto;color:#c9d6e8;white-space:pre-wrap;word-break:break-all}
+  .inspector .kv{font-family:ui-monospace,monospace;font-size:11px;color:var(--muted);margin-bottom:8px}
+
+  .form{padding:16px}
+  .form label{display:block;font-size:11px;color:var(--muted);margin:10px 0 4px;
+              text-transform:uppercase;letter-spacing:.5px}
+  .form input{width:100%;padding:8px 10px;background:var(--panel2);border:1px solid var(--border);
+              border-radius:6px;color:var(--text);font-size:13px;font-family:ui-monospace,monospace}
+  .form input:focus{outline:none;border-color:var(--accent)}
+  .btn{width:100%;background:var(--accent);color:#fff;border:0;padding:9px;border-radius:6px;
+       font-size:13px;cursor:pointer;margin-top:14px;font-weight:500}
+  .btn:hover{background:var(--accent2)}
+  .hint{font-size:11px;color:var(--muted);line-height:1.7;margin-top:10px}
+
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:11px 16px;border-bottom:1px solid var(--border);font-size:13px}
+  th{color:var(--muted);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+     background:var(--panel2)}
+  td .url{color:var(--accent);font-family:ui-monospace,monospace;font-size:12px;cursor:pointer}
+  td .fwd{color:var(--muted);font-family:ui-monospace,monospace;font-size:12px}
+  .badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+  .badge.on{background:rgba(52,211,153,.12);color:var(--green)}
+  .row-actions{display:flex;gap:10px;justify-content:flex-end}
+  .act{color:var(--muted);cursor:pointer;font-size:12px;border:0;background:none}
+  .act:hover{color:var(--text)}
+
+  @media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">
+    <div class="dot"></div>
+    tunmap <span class="beta">beta</span>
+  </div>
+  <div class="right">无注册 · 一把密钥接入 · 实时控制台</div>
+</nav>
+
+<div class="wrap">
+
+  <div class="hero">
+    <h2>把本机的 5050 端口暴露到公网</h2>
+    <p>在你本机跑下面这条命令，把 <span class="mono" style="color:var(--text)">5050</span> 换成你要暴露的端口，任何人就能通过分配的公网域名访问它。</p>
+    <div class="cmd"><span class="c"># Linux / macOS</span>
+tunmap-client --server http://<span style="color:var(--text)">你的服务器地址</span> \
+            --key <span style="color:var(--yellow)">&lt;部署时设置的密钥&gt;</span> \
+            --port 5050</div>
+    <div class="hint" style="margin-top:10px">安卓手机直接安装下方 APK，填 server / key / port 点启动即可。</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label"><span class="pulse"></span>在线隧道</div>
+      <div class="value" id="s-online">0</div>
+      <div class="sub">当前已连接客户端</div>
+    </div>
+    <div class="stat">
+      <div class="label">总请求数</div>
+      <div class="value" id="s-reqs">0</div>
+      <div class="sub">自服务启动</div>
+    </div>
+    <div class="stat">
+      <div class="label">上传 ↑</div>
+      <div class="value" id="s-up" style="font-size:20px">0 B</div>
+      <div class="sub">请求 body 累计</div>
+    </div>
+    <div class="stat">
+      <div class="label">下载 ↓</div>
+      <div class="value" id="s-down" style="font-size:20px">0 B</div>
+      <div class="sub">响应 body 累计</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <header>
+        <h3>实时请求检查器</h3>
+        <div class="filterbar">
+          <button class="fbtn active" data-f="all" onclick="setFilter('all',this)">All</button>
+          <button class="fbtn" data-f="GET" onclick="setFilter('GET',this)">GET</button>
+          <button class="fbtn" data-f="POST" onclick="setFilter('POST',this)">POST</button>
+          <button class="fbtn" data-f="PUT" onclick="setFilter('PUT',this)">PUT</button>
+          <button class="fbtn" data-f="DELETE" onclick="setFilter('DELETE',this)">DEL</button>
+          <button class="fbtn" data-f="err" onclick="setFilter('err',this)">4xx/5xx</button>
+          <input class="fsearch" id="fsearch" placeholder="搜索 path…" oninput="renderLogs()">
+        </div>
+      </header>
+      <div class="terminal" id="terminal">
+        <div class="empty">— 等待请求… 启动客户端后，访问分配的公网 URL，这里会实时显示 —</div>
+      </div>
+      <div class="inspector" id="inspector">
+        <div class="head" id="insp-head"></div>
+        <div class="tabs">
+          <div class="tab active" data-t="req" onclick="setTab('req')">Request</div>
+          <div class="tab" data-t="resp" onclick="setTab('resp')">Response</div>
+        </div>
+        <div id="insp-body"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <header><h3>当前在线隧道</h3></header>
+        <div style="max-height:420px;overflow-y:auto">
+          <table>
+            <tbody id="tunnel-body">
+              <tr><td style="color:var(--muted);text-align:center;padding:20px">暂无客户端连接</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let logs = [];
+let filter = 'all';
+let selectedLog = null;
+let inspTab = 'req';
+
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(r.statusText);
+  return r.json();
+}
+
+function fmtBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1024) return n+' B';
+  if (n < 1048576) return (n/1024).toFixed(1)+' KB';
+  return (n/1048576).toFixed(2)+' MB';
+}
+
+async function loadStats() {
+  try {
+    const s = await api('/api/stats');
+    document.getElementById('s-online').textContent = s.online_tunnels.length;
+    document.getElementById('s-reqs').textContent = s.total_requests;
+    document.getElementById('s-up').textContent = fmtBytes(s.req_bytes);
+    document.getElementById('s-down').textContent = fmtBytes(s.resp_bytes);
+
+    document.getElementById('tunnel-body').innerHTML = s.online_tunnels.length
+      ? s.online_tunnels.map(t => `<tr>
+          <td>
+            <div><a class="url" href="${t.public_url}" target="_blank">${t.public_url.replace('http://','')}</a></div>
+            <div class="fwd" style="margin-top:3px">→ localhost:${t.local_port}</div>
+            <span class="badge on" style="margin-top:6px;display:inline-block">● 在线</span>
+          </td>
+        </tr>`).join('')
+      : '<tr><td style="color:var(--muted);text-align:center;padding:20px">暂无客户端连接</td></tr>';
+  } catch(e){}
+}
+
+function setFilter(f, btn) {
+  filter = f;
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderLogs();
+}
+
+function setTab(t) {
+  inspTab = t;
+  document.querySelectorAll('.inspector .tab').forEach(b => b.classList.toggle('active', b.dataset.t === t));
+  renderInspector();
+}
+
+function appendLog(e) {
+  logs.unshift(e);
+  if (logs.length > 100) logs.pop();
+  renderLogs();
+}
+
+function renderLogs() {
+  const term = document.getElementById('terminal');
+  const q = document.getElementById('fsearch').value.toLowerCase();
+  const visible = logs.filter(e => {
+    if (filter === 'err' && e.status < 400) return false;
+    if (!['all','err'].includes(filter) && e.method !== filter) return false;
+    if (q && !e.path.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  if (!visible.length) {
+    term.innerHTML = '<div class="empty">— 无匹配请求 —</div>';
+    return;
+  }
+  term.innerHTML = visible.map(e => {
+    const time = new Date(e.at).toLocaleTimeString('zh-CN',{hour12:false});
+    const m = e.method.toLowerCase();
+    const stClass = 'st-'+Math.floor(e.status/100);
+    const sel = selectedLog === e ? 'selected' : '';
+    return `<div class="row ${sel}" onclick="showInspector(${logs.indexOf(e)})">
+      <span class="time">${time}</span>
+      <span class="m-${m}">${e.method.padEnd(6)}</span>
+      <span class="path">${e.path}</span>
+      <span class="${stClass}">${e.status}</span>
+      <span class="dur">${e.duration_ms}ms · ${e.subdomain}</span>
+    </div>`;
+  }).join('');
+}
+
+function showInspector(idx) {
+  selectedLog = logs[idx];
+  inspTab = 'req';
+  document.querySelectorAll('.inspector .tab').forEach(b => b.classList.toggle('active', b.dataset.t === 'req'));
+  document.getElementById('inspector').classList.add('show');
+  renderLogs(); renderInspector();
+}
+
+function renderInspector() {
+  if (!selectedLog) return;
+  const e = selectedLog;
+  document.getElementById('insp-head').innerHTML = `
+    <span class="m-${e.method.toLowerCase()}">${e.method}</span>
+    <span style="color:var(--text)">${e.path}</span>
+    <span class="st-${Math.floor(e.status/100)}">${e.status}</span>
+    <span style="color:var(--muted)">${e.duration_ms}ms · ${e.subdomain} → localhost:${e.local_port}</span>
+    <button class="close" onclick="closeInspector()">✕</button>`;
+  const body = document.getElementById('insp-body');
+  if (inspTab === 'req') {
+    const headers = Object.entries(e.req_headers || {}).map(([k,v]) => `<div><b>${k}:</b> ${escapeHtml(v)}</div>`).join('');
+    body.innerHTML = `<div class="kv">Headers:</div><pre>${headers || '(none)'}</pre>
+      <div class="kv" style="margin-top:10px">Body (${fmtBytes(e.req_bytes)}):</div>
+      <pre>${escapeHtml(e.req_body || '(empty)')}</pre>`;
+  } else {
+    const headers = Object.entries(e.resp_headers || {}).map(([k,v]) => `<div><b>${k}:</b> ${escapeHtml(v)}</div>`).join('');
+    body.innerHTML = `<div class="kv">Status: ${e.status} · Headers:</div><pre>${headers || '(none)'}</pre>
+      <div class="kv" style="margin-top:10px">Body (${fmtBytes(e.resp_bytes)}):</div>
+      <pre>${escapeHtml(e.resp_body || '(empty)')}</pre>`;
+  }
+}
+
+function closeInspector() {
+  selectedLog = null;
+  document.getElementById('inspector').classList.remove('show');
+  renderLogs();
+}
+
+function escapeHtml(s) {
+  return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+loadStats();
+setInterval(loadStats, 3000);
+
+const evtSource = new EventSource('/api/events');
+evtSource.addEventListener('log', ev => appendLog(JSON.parse(ev.data)));
+</script>
+</body>
+</html>
